@@ -5,7 +5,9 @@ The Horse Race Accessible Board Game is a racing game where each player controls
 
 Codes for the Arduinos (Mega and Nano) are included.
 
-App5 - code for Apple app
-ESP32_code - code for esp32 wifi board, links app to board
-four_players_megacode - Used when there are 4 players, uploaded onto an arduino mega
-4players_version2 - newer version of code when there are 4 players
+App5 - code for Apple app <br>
+ESP32_code - code for esp32 wifi board, links app to board <br>
+four_players_megacode - Used when there are 4 players, uploaded onto an arduino mega <br>
+4players_version2 - newer version of code when there are 4 players <br>
+sd_test - Code for board music <br>
+generalcode_uno - code for music whilst game is running <br>
