@@ -1,5 +1,5 @@
 # Horse-Race-Accessible-Board-Game
-The Horse Race Accessible Board Game is a racing game where each player controls a toy horse and the first player to complete two laps wins. Before the start of the game players choose one of the 3 controllers available in order to play the game.
+The Horse Race Accessible Board Game is a racing game where each player controls a toy horse and the first player to complete two laps wins. Before the start of the game players choose one of the 3 controllers (Joystick, buttons, app) available in order to play the game.
 
 **Ignore "esp32" and "musicCode"**, uploaded in error
 
