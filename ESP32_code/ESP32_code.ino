@@ -1,0 +1,222 @@
+//ESP32 code
+#include <Arduino.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+
+AsyncWebServer server(80);
+
+// SSID and password would be set to school wifi SSID and password
+const char* ssid = "ssid";
+const char* password = "password";
+
+// Pins for sending ready signals and finished signlas
+int player_ready[4] = {15, 2, 4, 16};
+int player_finished[4] = {5, 18, 19, 21};
+
+// variables for counting laps and for signaling if game has began
+volatile int laps[4] = {0, 0, 0, 0};
+volatile int gameState = 0;
+
+void notFound(AsyncWebServerRequest *request) {
+  request->send(404, "text/plain", "Not found");
+}
+
+// Set Static IP address
+IPAddress local_IP(192, 168, 137, 184);
+// Set Gateway IP address
+IPAddress gateway(192, 168, 1, 1);
+
+IPAddress subnet(255, 255, 0, 0);
+
+void setup() {
+  Serial.begin(115200); //serial used for troubleshooting
+
+  //Ready signals from app going to mega
+  pinMode(player_ready[0], OUTPUT);  
+  pinMode(player_ready[1], OUTPUT);  
+  pinMode(player_ready[2], OUTPUT);  
+  pinMode(player_ready[3], OUTPUT);  
+
+  //Player finished signals from esp32 to mega
+  pinMode(player_finished[0], OUTPUT);  
+  pinMode(player_finished[1], OUTPUT); 
+  pinMode(player_finished[2], OUTPUT); 
+  pinMode(player_finished[3], OUTPUT); 
+  
+  //Signal from mega that tells esp32 that game begins, esp then updates web server to signal app
+  attachInterrupt(23,changeState,RISING);
+
+  //Signals from reed switches that laps changes, also changes in web server
+  attachInterrupt(32,changeLapP1,RISING);
+  attachInterrupt(33,changeLapP2,RISING);
+  attachInterrupt(34,changeLapP3,RISING);
+  attachInterrupt(35,changeLapP4,RISING);
+
+  //PWM output pins to tracks
+  ledcAttachPin(12, 0);
+  ledcAttachPin(13, 1);
+  ledcAttachPin(14, 2);
+  ledcAttachPin(27, 3);
+  //Each pin has 8 bit resolution
+  ledcSetup(0, 4000, 8);
+  ledcSetup(1, 4000, 8);
+  ledcSetup(2, 4000, 8);
+  ledcSetup(3, 4000, 8);
+
+  //Connet to wifi network
+  if (!WiFi.config(local_IP, gateway, subnet)) {
+  Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  /*  This commented out section would be an alternative code
+   *  It would be used if the esp32 could not connect to the school network
+   *  It makes the esp32 an access point intead, 
+   *  and the players must connect to it from their system settings before starting the game   
+ 
+  Serial.print("Setting AP (Access Point)…");
+  WiFi.softAP(ssid);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  */
+
+  /*************WEB SERVER SETUP AND APP COMMUNICATION*************/
+
+  //What is displayed to the web server to be seen by them app and how data is recieved from the app is described by get requests
+  //The following are different requests that can be done by the app and how these requests afferct the ESP32
+  
+  //Send web page with input fields to client
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/html", "Game:" + (String)gameState + "<br>Player1:" + (String)laps[0] + "<br>Player2:" + 
+    (String)laps[1] + "<br>Player3:" + (String)laps[2] + "<br>Player4:" + (String)laps[3]);
+  });
+  //Reset values
+  server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    gameState = 0;
+    for (byte i = 0; i<4; i++){
+      laps[i]=0;
+    }
+    request->send(200, "text/html", "Game:" + (String)gameState + "<br>Player1:" + (String)laps[0] + "<br>Player2:" + 
+    (String)laps[1] + "<br>Player3:" + (String)laps[2] + "<br>Player4:" + (String)laps[3]);
+  });
+  
+  // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    int velocity = 0;
+    // GET input value on <ESP_IP>/get?player1=<inputMessage>
+    if (request->hasParam("player1")) {
+      inputMessage = request->getParam("player1")->value();
+      velocity = inputMessage.toInt();
+      if (inputMessage == "high") ledcWrite(0, 255);
+      else if (inputMessage == "ready") digitalWrite(player_ready[0],HIGH);
+      else if (inputMessage == "low")  ledcWrite(0, 0);
+      else if (velocity >= 0 && velocity < 256) ledcWrite(0, velocity);
+    }
+    else if (request->hasParam("player2")) {
+      inputMessage = request->getParam("player2")->value();
+      velocity = inputMessage.toInt();
+      if (inputMessage == "high") ledcWrite(1, 255);
+      else if (inputMessage == "ready") digitalWrite(player_ready[1],HIGH);
+      else if (inputMessage == "low")  ledcWrite(1, 0);
+      else if (velocity >= 0 && velocity < 256) ledcWrite(1, velocity);
+    }
+    else if (request->hasParam("player3")) {
+      inputMessage = request->getParam("player3")->value();
+      velocity = inputMessage.toInt();
+      if (inputMessage == "high") ledcWrite(2, 255);
+      else if (inputMessage == "ready") digitalWrite(player_ready[2],HIGH);
+      else if (inputMessage == "low")  ledcWrite(2, 0);
+      else if (velocity >= 0 && velocity < 256) ledcWrite(2, velocity);
+    }
+    else if (request->hasParam("player4")) {
+      inputMessage = request->getParam("player4")->value();
+      velocity = inputMessage.toInt();
+      if (inputMessage == "high") ledcWrite(3, 255);
+      else if (inputMessage == "ready") digitalWrite(player_ready[3],HIGH);
+      else if (inputMessage == "low")  ledcWrite(3, 0);
+      else if (velocity >= 0 && velocity < 256) ledcWrite(3, velocity);
+    }
+    else {
+      inputMessage = "No message sent";
+    }
+    
+    Serial.println(inputMessage);
+    request->send(200, "text/html", "Game:" + (String)gameState + "<br>Player1:" + (String)laps[0] + "<br>Player2:" + 
+    (String)laps[1] + "<br>Player3:" + (String)laps[2] + "<br>Player4:" + (String)laps[3]);
+  });
+  server.onNotFound(notFound);
+  server.begin();
+}
+
+void loop() {
+  //If any horse has made it to lap 2, the esp32 makes it stop and signals mega
+  for (int i=0; i<4; i++){
+    if (laps[i] > 1){
+      ledcWrite(i, 0);
+      digitalWrite(player_finished[i], HIGH);
+    }
+  }
+  
+}
+
+void changeState()
+{
+  gameState = 1;
+}
+
+void changeLapP1()
+{
+ static unsigned long last_interrupt_time = 0;
+ unsigned long interrupt_time = millis();
+ // If interrupts come faster than 200ms, assume it's a bounce and ignore
+ if (interrupt_time - last_interrupt_time > 2000)
+ {
+     laps[0]++;
+ }
+ last_interrupt_time = interrupt_time;
+}
+//... repeated for changeLapP2-4
+void changeLapP2()
+{
+ static unsigned long last_interrupt_time = 0;
+ unsigned long interrupt_time = millis();
+ if (interrupt_time - last_interrupt_time > 2000)
+ {
+     laps[1]++;
+ }
+ last_interrupt_time = interrupt_time;
+}
+
+void changeLapP3()
+{
+ static unsigned long last_interrupt_time = 0;
+ unsigned long interrupt_time = millis();
+ if (interrupt_time - last_interrupt_time > 2000)
+ {
+     laps[2]++;
+ }
+ last_interrupt_time = interrupt_time;
+}
+
+void changeLapP4()
+{
+ static unsigned long last_interrupt_time = 0;
+ unsigned long interrupt_time = millis();
+ if (interrupt_time - last_interrupt_time > 2000)
+ {
+     laps[3]++;
+ }
+ last_interrupt_time = interrupt_time;
+}
